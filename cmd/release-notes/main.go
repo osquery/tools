@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -11,35 +12,69 @@ import (
 	"text/template"
 
 	"github.com/machinebox/graphql"
+	"github.com/peterbourgon/ff"
 )
 
 func main() {
+	fs := flag.NewFlagSet("release-notes", flag.ExitOnError)
+	var (
+		flLastRelease       = fs.String("last", "", "Last Release")
+		flNewRelease        = fs.String("new", "", "New Release")
+		flExistingChangelog = fs.String("changelog", "", "Existing changelog file. This is used as a basis to skip existing items")
+		flGithubToken       = fs.String("github-token", os.Getenv("GITHUB_TOKEN"), "Github authentication token. Defaults to ENV[GITHUB_TOKEN]")
+	)
+
+	if err := ff.Parse(fs, os.Args[1:],
+		ff.WithConfigFileParser(ff.PlainParser),
+	); err != nil {
+		fmt.Fprintf(os.Stderr, "Flag parsing failure: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Look for missing options
+	missingOpt := false
+	for fl, val := range map[string]string{
+		"last":         *flLastRelease,
+		"new":          *flNewRelease,
+		"changelog":    *flExistingChangelog,
+		"github-token": *flGithubToken,
+	} {
+		if val == "" {
+			fmt.Fprintf(os.Stderr, "Missing required flag: %s\n", fl)
+			missingOpt = true
+		}
+	}
+
+	if missingOpt {
+		os.Exit(1)
+	}
+
 	ctx := context.Background()
 
 	graphqlClient := graphql.NewClient("https://api.github.com/graphql")
 	//graphqlClient.Log = func(s string) { log.Println(s) }
 
-	timestamp, err := getGitTimeStamp(ctx, graphqlClient, "4.3.0")
+	timestamp, err := getGitTimeStamp(ctx, graphqlClient, *flGithubToken, *flLastRelease)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	commits, err := getGitCommits(ctx, graphqlClient, timestamp)
+	commits, err := getGitCommits(ctx, graphqlClient, *flGithubToken, timestamp)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := changelogSnippet(commits); err != nil {
+	if err := changelogSnippet(commits, *flExistingChangelog, *flLastRelease, *flNewRelease); err != nil {
 		log.Fatal(err)
 	}
 
 }
 
-func changelogSnippet(commits []*Commit) error {
+func changelogSnippet(commits []*Commit, existingChangelog, lastVersion, newVersion string) error {
 	// This has a lot of stupid formatting
 
 	// some PRs were merged via rebase, not squash. So track what we've seen.
-	seen, err := parseChangelogForSeen("/Users/seph/checkouts/osquery/osquery/CHANGELOG.md")
+	seen, err := parseChangelogForSeen(existingChangelog)
 	if err != nil {
 		return err
 	}
@@ -80,10 +115,10 @@ func changelogSnippet(commits []*Commit) error {
 	}
 
 	changelogTemplate := `
-<a name="4.4.0"></a>
-## [4.4.0](https://github.com/osquery/osquery/releases/tag/4.4.0)
+<a name="{{ .NewVersion }}"></a>
+## [{{ .NewVersion }}](https://github.com/osquery/osquery/releases/tag/{{ .NewVersion }})
 
-[Git Commits](https://github.com/osquery/osquery/compare/4.3.0...4.4.0)
+[Git Commits](https://github.com/osquery/osquery/compare/{{ .LastVersion }}...{{ .NewVersion }})
 
 {{ range $i, $section := .Changelog }}
 ### {{ $section.Name }}
@@ -95,9 +130,13 @@ func changelogSnippet(commits []*Commit) error {
 `
 
 	var data = struct {
-		Changelog []changelogTypeForTemplate
+		Changelog   []changelogTypeForTemplate
+		LastVersion string
+		NewVersion  string
 	}{
-		Changelog: changelogFlat,
+		Changelog:   changelogFlat,
+		LastVersion: lastVersion,
+		NewVersion:  newVersion,
 	}
 
 	t, err := template.New("changelog").Parse(changelogTemplate)
@@ -150,7 +189,7 @@ func (c *Commit) ChangeSection() clSection {
 	return clToFix
 }
 
-func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, timestamp string) ([]*Commit, error) {
+func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string) ([]*Commit, error) {
 	req := graphql.NewRequest(`
 query ($timestamp: GitTimestamp!) {
   repository(owner: "osquery", name: "osquery") {
@@ -209,7 +248,7 @@ query ($timestamp: GitTimestamp!) {
 	}
 
 	req.Var("timestamp", timestamp)
-	req.Header.Add("Authorization", "token "+os.Getenv("GITHUB_TOKEN"))
+	req.Header.Add("Authorization", "token "+token)
 
 	if err := graphqlClient.Run(ctx, req, &respData); err != nil {
 		return nil, err
@@ -237,7 +276,7 @@ query ($timestamp: GitTimestamp!) {
 	return commits, nil
 }
 
-func getGitTimeStamp(ctx context.Context, graphqlClient *graphql.Client, lastVersion string) (string, error) {
+func getGitTimeStamp(ctx context.Context, graphqlClient *graphql.Client, token string, lastVersion string) (string, error) {
 	req := graphql.NewRequest(`
 query ($lastVer: String!) {
   repository(owner: "osquery", name: "osquery") {
@@ -261,7 +300,7 @@ query ($lastVer: String!) {
 	}
 
 	req.Var("lastVer", lastVersion)
-	req.Header.Add("Authorization", "token "+os.Getenv("GITHUB_TOKEN"))
+	req.Header.Add("Authorization", "token "+token)
 
 	if err := graphqlClient.Run(ctx, req, &respData); err != nil {
 		return "", err
