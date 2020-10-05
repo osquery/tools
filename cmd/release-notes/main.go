@@ -79,13 +79,14 @@ func changelogSnippet(commits []*Commit, existingChangelog, lastVersion, newVers
 		return err
 	}
 	changelog := map[clSection][]string{
-		clToFix:       make([]string, 0, len(commits)),
-		clBugFixes:    make([]string, 0, len(commits)),
-		clBuild:       make([]string, 0, len(commits)),
-		clHardening:   make([]string, 0, len(commits)),
-		clNewFeatures: make([]string, 0, len(commits)),
-		clSecurity:    make([]string, 0, len(commits)),
-		clTable:       make([]string, 0, len(commits)),
+		clToFix:        make([]string, 0, len(commits)),
+		clBugFixes:     make([]string, 0, len(commits)),
+		clBuild:        make([]string, 0, len(commits)),
+		clHardening:    make([]string, 0, len(commits)),
+		clNewFeatures:  make([]string, 0, len(commits)),
+		clUnderTheHood: make([]string, 0, len(commits)),
+		clSecurity:     make([]string, 0, len(commits)),
+		clTable:        make([]string, 0, len(commits)),
 	}
 
 	for _, c := range commits {
@@ -151,19 +152,21 @@ func changelogSnippet(commits []*Commit, existingChangelog, lastVersion, newVers
 type clSection string
 
 const (
-	clToFix       clSection = "FIXME: Please Categorize"
-	clBugFixes              = "Bug Fixes"
-	clBuild                 = "Build"
-	clHardening             = "Hardening"
-	clNewFeatures           = "New Features / Under the Hood improvements"
-	clSecurity              = "Security Issues"
-	clTable                 = "Table Changes"
-	clDocs                  = "Documentation"
+	clToFix        clSection = "FIXME: Please Categorize"
+	clBugFixes               = "Bug Fixes"
+	clBuild                  = "Build"
+	clHardening              = "Hardening"
+	clNewFeatures            = "New Features"
+	clUnderTheHood           = "Under the Hood improvements"
+	clSecurity               = "Security Issues"
+	clTable                  = "Table Changes"
+	clDocs                   = "Documentation"
 )
 
 var sectionOrder = []clSection{
 	clToFix,
 	clNewFeatures,
+	clUnderTheHood,
 	clTable,
 	clBugFixes,
 	clDocs,
