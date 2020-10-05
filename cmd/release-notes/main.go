@@ -181,15 +181,34 @@ type Commit struct {
 	Timestamp       string
 	PRNumber        int
 	PRTitle         string
-	PRLabels        []string
+	PRLabels        map[string]bool
 }
 
 func (c *Commit) ChangeLine() string {
 	return fmt.Sprintf("%s ([#%d](https://github.com/osquery/osquery/pull/%d))", c.PRTitle, c.PRNumber, c.PRNumber)
 }
 
+// ChangeSection attempts to analyze the commit, and return what
+// section of the changelog it is for.
 func (c *Commit) ChangeSection() clSection {
+	switch {
+	case c.labelsInclude("documentation"):
+		return clDocs
+	}
+
 	return clToFix
+}
+
+// labelsInclude checks the labels on this PR for whether all
+// requested labels are applied.
+func (c *Commit) labelsInclude(labels ...string) bool {
+	for _, l := range labels {
+		if _, ok := c.PRLabels[l]; !ok {
+			return false
+		}
+	}
+
+	return true
 }
 
 func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string) ([]*Commit, error) {
@@ -261,9 +280,9 @@ query ($timestamp: GitTimestamp!) {
 
 	for i, rawCommit := range respData.Repository.Object.History.Nodes {
 		pr := rawCommit.AssociatedPullRequests.Nodes[0]
-		prLabels := make([]string, len(pr.Labels.Nodes))
-		for i, label := range pr.Labels.Nodes {
-			prLabels[i] = label.Name
+		prLabels := make(map[string]bool, len(pr.Labels.Nodes))
+		for _, label := range pr.Labels.Nodes {
+			prLabels[label.Name] = true
 		}
 
 		commits[i] = &Commit{
