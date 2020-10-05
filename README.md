@@ -18,5 +18,23 @@ for the PR. Run this cmd, take the output, and update the CHANGELOG
 file. As you edit and categorize, you can re-run the script to see the
 omissions.
 
-The underlying implementation uses timestamps, because that's what git
-supports.
+The underlying implementation uses timestamps to generate the diff
+between the labels, because that's what git supports.
+
+### How to use
+
+This is written in `go` and you will need the go tool chain installed.
+
+It may be run in place with a command like:
+
+``` shell
+go run ./cmd/release-notes --help
+```
+
+As an example:
+
+``` shell
+export GITHUB_TOKEN="{REDACTED]"
+
+go run ./cmd/release-notes --changelog ~/checkouts/osquery/osquery/CHANGELOG.md  --last 4.5.0 --new 4.5.1
+```

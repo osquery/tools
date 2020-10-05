@@ -79,13 +79,14 @@ func changelogSnippet(commits []*Commit, existingChangelog, lastVersion, newVers
 		return err
 	}
 	changelog := map[clSection][]string{
-		clToFix:       make([]string, 0, len(commits)),
-		clBugFixes:    make([]string, 0, len(commits)),
-		clBuild:       make([]string, 0, len(commits)),
-		clHardening:   make([]string, 0, len(commits)),
-		clNewFeatures: make([]string, 0, len(commits)),
-		clSecurity:    make([]string, 0, len(commits)),
-		clTable:       make([]string, 0, len(commits)),
+		clToFix:        make([]string, 0, len(commits)),
+		clBugFixes:     make([]string, 0, len(commits)),
+		clBuild:        make([]string, 0, len(commits)),
+		clHardening:    make([]string, 0, len(commits)),
+		clNewFeatures:  make([]string, 0, len(commits)),
+		clUnderTheHood: make([]string, 0, len(commits)),
+		clSecurity:     make([]string, 0, len(commits)),
+		clTable:        make([]string, 0, len(commits)),
 	}
 
 	for _, c := range commits {
@@ -151,19 +152,21 @@ func changelogSnippet(commits []*Commit, existingChangelog, lastVersion, newVers
 type clSection string
 
 const (
-	clToFix       clSection = "FIXME: Please Categorize"
-	clBugFixes              = "Bug Fixes"
-	clBuild                 = "Build"
-	clHardening             = "Hardening"
-	clNewFeatures           = "New Features / Under the Hood improvements"
-	clSecurity              = "Security Issues"
-	clTable                 = "Table Changes"
-	clDocs                  = "Documentation"
+	clToFix        clSection = "FIXME: Please Categorize"
+	clBugFixes     clSection = "Bug Fixes"
+	clBuild        clSection = "Build"
+	clHardening    clSection = "Hardening"
+	clNewFeatures  clSection = "New Features"
+	clUnderTheHood clSection = "Under the Hood improvements"
+	clSecurity     clSection = "Security Issues"
+	clTable        clSection = "Table Changes"
+	clDocs         clSection = "Documentation"
 )
 
 var sectionOrder = []clSection{
 	clToFix,
 	clNewFeatures,
+	clUnderTheHood,
 	clTable,
 	clBugFixes,
 	clDocs,
@@ -178,15 +181,34 @@ type Commit struct {
 	Timestamp       string
 	PRNumber        int
 	PRTitle         string
-	PRLabels        []string
+	PRLabels        map[string]bool
 }
 
 func (c *Commit) ChangeLine() string {
 	return fmt.Sprintf("%s ([#%d](https://github.com/osquery/osquery/pull/%d))", c.PRTitle, c.PRNumber, c.PRNumber)
 }
 
+// ChangeSection attempts to analyze the commit, and return what
+// section of the changelog it is for.
 func (c *Commit) ChangeSection() clSection {
+	switch {
+	case c.labelsInclude("documentation"):
+		return clDocs
+	}
+
 	return clToFix
+}
+
+// labelsInclude checks the labels on this PR for whether all
+// requested labels are applied.
+func (c *Commit) labelsInclude(labels ...string) bool {
+	for _, l := range labels {
+		if _, ok := c.PRLabels[l]; !ok {
+			return false
+		}
+	}
+
+	return true
 }
 
 func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string) ([]*Commit, error) {
@@ -258,9 +280,9 @@ query ($timestamp: GitTimestamp!) {
 
 	for i, rawCommit := range respData.Repository.Object.History.Nodes {
 		pr := rawCommit.AssociatedPullRequests.Nodes[0]
-		prLabels := make([]string, len(pr.Labels.Nodes))
-		for i, label := range pr.Labels.Nodes {
-			prLabels[i] = label.Name
+		prLabels := make(map[string]bool, len(pr.Labels.Nodes))
+		for _, label := range pr.Labels.Nodes {
+			prLabels[label.Name] = true
 		}
 
 		commits[i] = &Commit{
