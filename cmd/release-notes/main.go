@@ -153,14 +153,14 @@ type clSection string
 
 const (
 	clToFix        clSection = "FIXME: Please Categorize"
-	clBugFixes               = "Bug Fixes"
-	clBuild                  = "Build"
-	clHardening              = "Hardening"
-	clNewFeatures            = "New Features"
-	clUnderTheHood           = "Under the Hood improvements"
-	clSecurity               = "Security Issues"
-	clTable                  = "Table Changes"
-	clDocs                   = "Documentation"
+	clBugFixes     clSection = "Bug Fixes"
+	clBuild        clSection = "Build"
+	clHardening    clSection = "Hardening"
+	clNewFeatures  clSection = "New Features"
+	clUnderTheHood clSection = "Under the Hood improvements"
+	clSecurity     clSection = "Security Issues"
+	clTable        clSection = "Table Changes"
+	clDocs         clSection = "Documentation"
 )
 
 var sectionOrder = []clSection{
