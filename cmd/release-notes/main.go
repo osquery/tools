@@ -279,18 +279,25 @@ query ($timestamp: GitTimestamp!) {
 	commits := make([]*Commit, len(respData.Repository.Object.History.Nodes))
 
 	for i, rawCommit := range respData.Repository.Object.History.Nodes {
-		pr := rawCommit.AssociatedPullRequests.Nodes[0]
-		prLabels := make(map[string]bool, len(pr.Labels.Nodes))
-		for _, label := range pr.Labels.Nodes {
-			prLabels[label.Name] = true
+		var prNumber int
+		prTitle := fmt.Sprintf("%s (MISSING PR for commit %s)", rawCommit.MessageHeadline, rawCommit.Sha)
+		prLabels := make(map[string]bool)
+
+		if len(rawCommit.AssociatedPullRequests.Nodes) > 0 {
+			pr := rawCommit.AssociatedPullRequests.Nodes[0]
+			prTitle = pr.Title
+			prNumber = pr.Number
+			for _, label := range pr.Labels.Nodes {
+				prLabels[label.Name] = true
+			}
 		}
 
 		commits[i] = &Commit{
 			Sha:             rawCommit.Sha,
 			MessageHeadline: rawCommit.MessageHeadline,
 			Timestamp:       rawCommit.Timestamp,
-			PRNumber:        pr.Number,
-			PRTitle:         pr.Title,
+			PRNumber:        prNumber,
+			PRTitle:         prTitle,
 			PRLabels:        prLabels,
 		}
 	}
