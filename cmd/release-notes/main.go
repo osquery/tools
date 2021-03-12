@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"text/template"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/machinebox/graphql"
 	"github.com/peterbourgon/ff"
 )
@@ -224,6 +225,11 @@ query ($timestamp: GitTimestamp!) {
             oid
             messageHeadline
             committedDate
+            authors(first: 100) {
+              nodes {
+                email
+              }
+            }
             associatedPullRequests(first: 10) {
               nodes {
                 number
@@ -249,9 +255,14 @@ query ($timestamp: GitTimestamp!) {
 			Object struct {
 				History struct {
 					Nodes []struct {
-						Sha                    string `json:"oid"`
-						Timestamp              string `json:"committedDate"`
-						MessageHeadline        string
+						Sha             string `json:"oid"`
+						Timestamp       string `json:"committedDate"`
+						MessageHeadline string
+						Authors         struct {
+							Nodes []struct {
+								Email string
+							}
+						}
 						AssociatedPullRequests struct {
 							Nodes []struct {
 								Number int
@@ -275,6 +286,8 @@ query ($timestamp: GitTimestamp!) {
 	if err := graphqlClient.Run(ctx, req, &respData); err != nil {
 		return nil, err
 	}
+
+	spew.Dump(respData)
 
 	commits := make([]*Commit, len(respData.Repository.Object.History.Nodes))
 
