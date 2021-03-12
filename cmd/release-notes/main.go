@@ -166,8 +166,8 @@ const (
 var sectionOrder = []clSection{
 	clToFix,
 	clNewFeatures,
-	clUnderTheHood,
 	clTable,
+	clUnderTheHood,
 	clBugFixes,
 	clDocs,
 	clBuild,
