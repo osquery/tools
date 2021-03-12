@@ -100,7 +100,7 @@ func fetchCommits(ctx context.Context, graphqlClient *graphql.Client, token stri
 		req := graphql.NewRequest(query)
 		req.Header.Add("Authorization", "token "+token)
 
-		// Empiracally, we can always have timestamp. The
+		// Empirically, we can always have timestamp. The
 		// after cursor still has the desired effect.
 		req.Var("timestamp", timestamp)
 

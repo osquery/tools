@@ -264,7 +264,7 @@ func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token str
 			}
 
 			authors := make([]string, len(authorSet))
-			for a, _ := range authorSet {
+			for a := range authorSet {
 				authors = append(authors, a)
 			}
 
