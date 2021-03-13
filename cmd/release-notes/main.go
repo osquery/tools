@@ -13,6 +13,7 @@ import (
 
 	"github.com/machinebox/graphql"
 	"github.com/peterbourgon/ff"
+	"golang.org/x/text/message"
 )
 
 func main() {
@@ -89,7 +90,14 @@ func changelogSnippet(commits []*Commit, existingChangelog, lastVersion, newVers
 		clTable:        make([]string, 0, len(commits)),
 	}
 
+	authorSet := make(map[string]bool)
+
 	for _, c := range commits {
+		for _, a := range c.Authors {
+			authorSet[a] = true
+		}
+
+		// If we're already seen this PR, don't add it to the print list
 		if _, ok := seen[c.PRNumber]; ok {
 			continue
 		}
@@ -121,6 +129,8 @@ func changelogSnippet(commits []*Commit, existingChangelog, lastVersion, newVers
 
 [Git Commits](https://github.com/osquery/osquery/compare/{{ .LastVersion }}...{{ .NewVersion }})
 
+Representing commits from {{ .AuthorCount }} contributors! Thank you all.
+
 {{ range $i, $section := .Changelog }}
 ### {{ $section.Name }}
 {{ range $i, $line := $section.Lines }}
@@ -134,10 +144,12 @@ func changelogSnippet(commits []*Commit, existingChangelog, lastVersion, newVers
 		Changelog   []changelogTypeForTemplate
 		LastVersion string
 		NewVersion  string
+		AuthorCount string
 	}{
 		Changelog:   changelogFlat,
 		LastVersion: lastVersion,
 		NewVersion:  newVersion,
+		AuthorCount: message.NewPrinter(message.MatchLanguage("en")).Sprintf("%d", len(authorSet)),
 	}
 
 	t, err := template.New("changelog").Parse(changelogTemplate)
@@ -166,8 +178,8 @@ const (
 var sectionOrder = []clSection{
 	clToFix,
 	clNewFeatures,
-	clUnderTheHood,
 	clTable,
+	clUnderTheHood,
 	clBugFixes,
 	clDocs,
 	clBuild,
@@ -182,6 +194,7 @@ type Commit struct {
 	PRNumber        int
 	PRTitle         string
 	PRLabels        map[string]bool
+	Authors         []string
 }
 
 func (c *Commit) ChangeLine() string {
@@ -212,97 +225,63 @@ func (c *Commit) labelsInclude(labels ...string) bool {
 }
 
 func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string) ([]*Commit, error) {
-	req := graphql.NewRequest(`
-query ($timestamp: GitTimestamp!) {
-  repository(owner: "osquery", name: "osquery") {
-    nameWithOwner
-    object(expression: "master") {
-      ... on Commit {
-        oid
-        history(first: 100, since: $timestamp) {
-          nodes {
-            oid
-            messageHeadline
-            committedDate
-            associatedPullRequests(first: 10) {
-              nodes {
-                number
-                title
-                labels(first: 10) {
-                  nodes {
-                    name
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-`)
-
-	var respData struct {
-		Repository struct {
-			Name   string `json:"nameWithOwner"`
-			Object struct {
-				History struct {
-					Nodes []struct {
-						Sha                    string `json:"oid"`
-						Timestamp              string `json:"committedDate"`
-						MessageHeadline        string
-						AssociatedPullRequests struct {
-							Nodes []struct {
-								Number int
-								Title  string
-								Labels struct {
-									Nodes []struct {
-										Name string
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	req.Var("timestamp", timestamp)
-	req.Header.Add("Authorization", "token "+token)
-
-	if err := graphqlClient.Run(ctx, req, &respData); err != nil {
+	responses, err := fetchCommits(ctx, graphqlClient, token, timestamp)
+	if err != nil {
 		return nil, err
 	}
 
-	commits := make([]*Commit, len(respData.Repository.Object.History.Nodes))
+	allCommits := []*Commit{}
 
-	for i, rawCommit := range respData.Repository.Object.History.Nodes {
-		var prNumber int
-		prTitle := fmt.Sprintf("%s (MISSING PR for commit %s)", rawCommit.MessageHeadline, rawCommit.Sha)
-		prLabels := make(map[string]bool)
+	for _, respData := range responses {
+		commits := make([]*Commit, len(respData.Repository.Object.History.Nodes))
 
-		if len(rawCommit.AssociatedPullRequests.Nodes) > 0 {
-			pr := rawCommit.AssociatedPullRequests.Nodes[0]
-			prTitle = pr.Title
-			prNumber = pr.Number
-			for _, label := range pr.Labels.Nodes {
-				prLabels[label.Name] = true
+		for i, rawCommit := range respData.Repository.Object.History.Nodes {
+			var prNumber int
+			prTitle := fmt.Sprintf("%s (MISSING PR for commit %s)", rawCommit.MessageHeadline, rawCommit.Sha)
+			prLabels := make(map[string]bool)
+
+			if len(rawCommit.AssociatedPullRequests.Nodes) > 0 {
+				pr := rawCommit.AssociatedPullRequests.Nodes[0]
+				prTitle = pr.Title
+				prNumber = pr.Number
+				for _, label := range pr.Labels.Nodes {
+					prLabels[label.Name] = true
+				}
+			}
+
+			authorSet := make(map[string]bool)
+			if len(rawCommit.Authors.Nodes) > 0 {
+				for _, a := range rawCommit.Authors.Nodes {
+					switch {
+					case a.User.Login != "":
+						authorSet[a.User.Login] = true
+					case a.Email != "":
+						authorSet[a.Email] = true
+					}
+				}
+			} else {
+				fmt.Printf("WARNING: Commit %s is missing authors\n", rawCommit.Sha)
+			}
+
+			authors := make([]string, len(authorSet))
+			for a := range authorSet {
+				authors = append(authors, a)
+			}
+
+			commits[i] = &Commit{
+				Sha:             rawCommit.Sha,
+				MessageHeadline: rawCommit.MessageHeadline,
+				Timestamp:       rawCommit.Timestamp,
+				PRNumber:        prNumber,
+				PRTitle:         prTitle,
+				PRLabels:        prLabels,
+				Authors:         authors,
 			}
 		}
-
-		commits[i] = &Commit{
-			Sha:             rawCommit.Sha,
-			MessageHeadline: rawCommit.MessageHeadline,
-			Timestamp:       rawCommit.Timestamp,
-			PRNumber:        prNumber,
-			PRTitle:         prTitle,
-			PRLabels:        prLabels,
-		}
+		allCommits = append(allCommits, commits...)
 	}
 
-	return commits, nil
+	return allCommits, nil
 }
 
 func getGitTimeStamp(ctx context.Context, graphqlClient *graphql.Client, token string, lastVersion string) (string, error) {
