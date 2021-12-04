@@ -173,6 +173,7 @@ const (
 	clSecurity     clSection = "Security Issues"
 	clTable        clSection = "Table Changes"
 	clDocs         clSection = "Documentation"
+	clPacks        clSection = "Packs"
 )
 
 var sectionOrder = []clSection{
@@ -182,6 +183,7 @@ var sectionOrder = []clSection{
 	clUnderTheHood,
 	clBugFixes,
 	clDocs,
+	clPacks,
 	clBuild,
 	clSecurity,
 	clHardening,
@@ -207,6 +209,8 @@ func (c *Commit) ChangeSection() clSection {
 	switch {
 	case c.labelsInclude("documentation"):
 		return clDocs
+	case c.labelsInclude("packs"):
+		return clPacks
 	}
 
 	return clToFix
