@@ -60,7 +60,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	commits, err := getGitCommits(ctx, graphqlClient, *flGithubToken, timestamp)
+	commits, err := getGitCommits(ctx, graphqlClient, *flGithubToken, timestamp, *flNewRelease)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -228,8 +228,8 @@ func (c *Commit) labelsInclude(labels ...string) bool {
 	return true
 }
 
-func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string) ([]*Commit, error) {
-	responses, err := fetchCommits(ctx, graphqlClient, token, timestamp)
+func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string, newRelease string) ([]*Commit, error) {
+	responses, err := fetchCommits(ctx, graphqlClient, token, timestamp, newRelease)
 	if err != nil {
 		return nil, err
 	}

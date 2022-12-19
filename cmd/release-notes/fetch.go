@@ -7,10 +7,10 @@ import (
 )
 
 const query = `
-query ($after: String, $timestamp: GitTimestamp!) {
+query ($after: String, $timestamp: GitTimestamp!, $newRelease: String) {
   repository(owner: "osquery", name: "osquery") {
     nameWithOwner
-    object(expression: "master") {
+    object(expression: $newRelease) {
       ... on Commit {
         oid
         history(first: 100, after: $after, since: $timestamp) {
@@ -89,7 +89,7 @@ type responseType struct {
 	}
 }
 
-func fetchCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string) ([]responseType, error) {
+func fetchCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string, newRelease string) ([]responseType, error) {
 	responses := []responseType{}
 
 	cursor := ""
@@ -103,6 +103,9 @@ func fetchCommits(ctx context.Context, graphqlClient *graphql.Client, token stri
 		// Empirically, we can always have timestamp. The
 		// after cursor still has the desired effect.
 		req.Var("timestamp", timestamp)
+
+		// We need a commit range between timestamp and the commit newRelease
+		req.Var("newRelease", newRelease)
 
 		// Set pagination
 		if cursor != "" {
