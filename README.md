@@ -1,12 +1,14 @@
-# packaging-tools
+# Tools
 
 Tools for maintaining osquery releases
 
 ## Release Notes & Changelog Generation
 
 `cmd/release-notes` is a simple wrapper around github to generate a
-CHANGELOG. Examines an existing CHANGELOG file, and enumerates commits
-via graphql to generate list of things to add to the changelog.
+CHANGELOG. It uses graphql to cather the list of all commits, and
+then examines an existing CHANGELOG file to suggest the omissions.
+
+It categorizes the commits based on simple logic based on the PR labels.
 
 Output will be displayed to stdout.
 
