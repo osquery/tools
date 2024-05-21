@@ -7,13 +7,13 @@ import (
 )
 
 const query = `
-query ($after: String, $timestamp: GitTimestamp!) {
+query ($after: String, $since: GitTimestamp!, $until: GitTimestamp!) {
   repository(owner: "osquery", name: "osquery") {
     nameWithOwner
     object(expression: "master") {
       ... on Commit {
         oid
-        history(first: 100, after: $after, since: $timestamp) {
+        history(first: 100, after: $after, since: $since, until: $until) {
           pageInfo {
             endCursor
             hasNextPage
@@ -89,7 +89,7 @@ type responseType struct {
 	}
 }
 
-func fetchCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string) ([]responseType, error) {
+func fetchCommits(ctx context.Context, graphqlClient *graphql.Client, token, since, until string) ([]responseType, error) {
 	responses := []responseType{}
 
 	cursor := ""
@@ -102,7 +102,8 @@ func fetchCommits(ctx context.Context, graphqlClient *graphql.Client, token stri
 
 		// Empirically, we can always have timestamp. The
 		// after cursor still has the desired effect.
-		req.Var("timestamp", timestamp)
+		req.Var("since", since)
+		req.Var("until", until)
 
 		// Set pagination
 		if cursor != "" {

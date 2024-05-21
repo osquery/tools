@@ -55,14 +55,22 @@ func main() {
 	graphqlClient := graphql.NewClient("https://api.github.com/graphql")
 	//graphqlClient.Log = func(s string) { log.Println(s) }
 
-	timestamp, err := getGitTimeStamp(ctx, graphqlClient, *flGithubToken, *flLastRelease)
+	since, err := getGitTimeStamp(ctx, graphqlClient, *flGithubToken, *flLastRelease)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	commits, err := getGitCommits(ctx, graphqlClient, *flGithubToken, timestamp)
+	until, err := getGitTimeStamp(ctx, graphqlClient, *flGithubToken, *flNewRelease)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	commits, err := getGitCommits(ctx, graphqlClient, *flGithubToken, since, until)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(commits) == 0 {
+		log.Fatal("No git commits retrieved. Either a bad GITHUB_TOKEN or bad shas")
 	}
 
 	if err := changelogSnippet(commits, *flExistingChangelog, *flLastRelease, *flNewRelease); err != nil {
@@ -209,27 +217,34 @@ func (c *Commit) ChangeSection() clSection {
 	switch {
 	case c.labelsInclude("documentation"):
 		return clDocs
+	case c.labelsInclude("test", "CI/CD", "build", "cmake", "libraries"):
+		return clBuild
 	case c.labelsInclude("packs"):
 		return clPacks
+	case c.labelsInclude("bug"): // This should happen before virtual tables
+		return clBugFixes
+	case c.labelsInclude("virtual tables"):
+		return clTable
+
 	}
 
 	return clToFix
 }
 
-// labelsInclude checks the labels on this PR for whether all
+// labelsInclude checks the labels on this PR for whether any
 // requested labels are applied.
 func (c *Commit) labelsInclude(labels ...string) bool {
 	for _, l := range labels {
-		if _, ok := c.PRLabels[l]; !ok {
-			return false
+		if _, ok := c.PRLabels[l]; ok {
+			return true
 		}
 	}
 
-	return true
+	return false
 }
 
-func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token string, timestamp string) ([]*Commit, error) {
-	responses, err := fetchCommits(ctx, graphqlClient, token, timestamp)
+func getGitCommits(ctx context.Context, graphqlClient *graphql.Client, token, since, until string) ([]*Commit, error) {
+	responses, err := fetchCommits(ctx, graphqlClient, token, since, until)
 	if err != nil {
 		return nil, err
 	}
